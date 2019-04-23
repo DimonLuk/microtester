@@ -1,0 +1,53 @@
+version: "0.0.1" # Version of the microtester
+
+variables: # varuables you need to build the service
+  cool_service: git@github.com/cool_service # Canb both http and ssh link
+  another_service: git@github.com/another_service
+  home: $ENV(HOME) # Value from environment can be used only during the iniitialization
+  my_msg: $COMPUTE(hello_world.py) # Will use function from that file to get value. If you want to cache the result of the module do $COMPUTE(file.py, cache)
+
+microtester_settings:
+  output_path: $VAR(home)/output
+  mode: automated # means repoes will be cloned to output_path and infrastracture will be built here. local means you have to provide path to your repositories on your machine (absolute paths). mixed will mix everything
+
+services_meta_description:
+  cool_service:
+    repo: $VAR(cool_service)
+    branch: develop # for automated and mixed modes
+    dockerfile: buid/Dockerfile.my # Dockerfile by default. You have to provide path as if you were inside the repository
+
+  another_service:
+    repo: $VAR(cool_service)
+    branch: develop
+
+services:
+  # Write usual docker compose as if you were inside the individual repository. You don't need to specify dockerfiles and context here and you don't need to configure network
+  database:
+    image: postgres:latest
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: user
+    volumes:
+      - $VAR(home)/postgres_scripts:/docker-entrypoint-initdb.d:z
+    depends_on:
+      - web_mocks # depeends on created mocks you don't need to specify them here
+  cool_service:
+    build:
+      args:
+        - MESSAGE=hello
+    depends_on: database
+    volumes:
+      $SPEC(service_dir)/artifacts:/code/coverage:z # Special variable which will reference the service directory on your host machine
+  another_service:
+    build:
+      args:
+        - MESSAGE=$VAR(my_msg)
+    depends_on: database
+
+web_mocks:
+  - address: http://example.com
+    data: $VAR(home)/example.json
+    mime_type: application/json
+  - address: http://github.com/.* # you can use python regexpressions here
+    data: $VAR(home)/index.html
+    mime_type: text/html
